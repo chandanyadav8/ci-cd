@@ -60,7 +60,7 @@ jobs:
             docker pull "$IMAGE"
             docker stop geo-tracking || true
             docker rm geo-tracking || true
-            docker run -d --name geo-tracking --network geo-net -p 8080:8080 \
+            docker run -d --name geo-tracking --network geo-net -p 80:8080 -p 8080:8080 \
               -e SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/geo_tracking \
               -e SPRING_DATASOURCE_USERNAME=postgres \
               -e SPRING_DATASOURCE_PASSWORD=root \
