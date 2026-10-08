@@ -19,7 +19,7 @@ public class LocationController {
     public LocationController(LocationService locationService){
         this.locationService=locationService;
     }
-    @GetMapping("/getLocation")
+    @GetMapping("/getLocations")
     public String getLocation()
     {
         return "this is my current location";
