@@ -1,0 +1,69 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: chandanyadav8448/geo-tracking-service:latest
+
+      - name: Deploy on EC2
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            IMAGE=chandanyadav8448/geo-tracking-service:latest
+
+            docker network inspect geo-net >/dev/null 2>&1 || docker network create geo-net
+
+            if [ -z "$(docker ps -aq -f name=^postgres$)" ]; then
+              docker run -d --name postgres --network geo-net \
+                -e POSTGRES_DB=geo_tracking \
+                -e POSTGRES_USER=postgres \
+                -e POSTGRES_PASSWORD=root \
+                postgres:16
+            fi
+            docker start postgres
+
+            if [ -z "$(docker ps -aq -f name=^redis$)" ]; then
+              docker run -d --name redis --network geo-net redis:7
+            fi
+            docker start redis
+
+            docker pull "$IMAGE"
+            docker stop geo-tracking || true
+            docker rm geo-tracking || true
+            docker run -d --name geo-tracking --network geo-net -p 8080:8080 \
+              -e SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/geo_tracking \
+              -e SPRING_DATASOURCE_USERNAME=postgres \
+              -e SPRING_DATASOURCE_PASSWORD=root \
+              -e SPRING_DATA_REDIS_HOST=redis \
+              -e SPRING_DATA_REDIS_PORT=6379 \
+              "$IMAGE"
